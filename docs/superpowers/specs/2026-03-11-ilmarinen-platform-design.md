@@ -54,10 +54,47 @@ Service within the platform that orchestrates app creation and deployment.
 Pipeline:
 
 1. **Specification** — AI converts chat dialogue into structured JSON spec:
-   - App name and subdomain
-   - Data models with fields and relationships
-   - Screens (list, detail, form types)
-   - Notification rules (trigger conditions, channel, message templates)
+
+   ```json
+   {
+     "name": "my-pet",
+     "subdomain": "my-pet",
+     "description": "Pet procedure tracker with reminders",
+     "models": [
+       {
+         "name": "Pet",
+         "fields": [
+           { "name": "name", "type": "String" },
+           { "name": "breed", "type": "String", "optional": true },
+           { "name": "birthDate", "type": "DateTime", "optional": true }
+         ]
+       },
+       {
+         "name": "Procedure",
+         "fields": [
+           { "name": "name", "type": "String" },
+           { "name": "lastDone", "type": "DateTime" },
+           { "name": "intervalDays", "type": "Int" },
+           { "name": "petId", "type": "relation", "target": "Pet" }
+         ]
+       }
+     ],
+     "screens": [
+       { "name": "PetList", "type": "list", "model": "Pet" },
+       { "name": "PetDetail", "type": "detail", "model": "Pet", "children": ["Procedure"] },
+       { "name": "ProcedureForm", "type": "form", "model": "Procedure" }
+     ],
+     "notifications": [
+       {
+         "trigger": { "model": "Procedure", "condition": "daysUntilNext <= 7" },
+         "channel": "telegram",
+         "template": "Reminder: {{procedure.name}} for {{pet.name}} is due in {{daysUntilNext}} days"
+       }
+     ]
+   }
+   ```
+
+   This JSON spec is the contract between the chat/AI phase and the code generation phase. The AI produces it, the code generator consumes it. Both sides can be built and tested independently against this schema.
 
 2. **Scaffolding** — clone app-template, substitute name/subdomain in configs, CREATE DATABASE in shared PostgreSQL
 
@@ -69,11 +106,24 @@ Pipeline:
 
 4. **Validation** — `bunx prisma validate` + `bunx tsc --noEmit`. On failure, AI receives error log and retries (up to 3 attempts)
 
-5. **Build and deploy** — `docker build` for api and web, `docker compose up`, `prisma migrate deploy`, register subdomain route in Caddy
+5. **Build and deploy** — `docker build` for api and web, `docker compose up`, `prisma migrate deploy`, register subdomain in Caddy via admin API (`POST /config/apps/http/servers/srv0/routes` to add a route for the new subdomain pointing to the app's web container). Caddy's admin API allows live config updates without restart.
 
-6. **Notification** — user receives link in chat: `<subdomain>.apps.muntim.ru`
+6. **Health check** — after deploy, App Engine sends a GET to the app's health endpoint. If it doesn't respond within 30 seconds, mark app status as "error".
+
+7. **Notification** — user receives link in chat: `<subdomain>.apps.muntim.ru`
 
 Expected time: 2-5 minutes per app creation. User sees progress updates in chat.
+
+### Edit pipeline
+
+Editing an existing app differs from creation:
+
+1. **Specification** — AI receives the current spec + user's change request, produces an updated spec with a diff summary
+2. **Code update** — AI regenerates only the changed modules/pages. Unchanged files are preserved.
+3. **Database migration** — Prisma compares new schema against existing database, generates migration. If migration would lose data (dropping columns/tables), AI flags this to the user for confirmation before proceeding.
+4. **Validation** — same as creation (TypeScript + Prisma validate)
+5. **Rebuild and redeploy** — `docker build` + `docker compose up --force-recreate`. Brief downtime acceptable for MVP (seconds during container swap).
+6. **Health check** — same as creation
 
 ## User Flow
 
@@ -107,7 +157,8 @@ Expected time: 2-5 minutes per app creation. User sees progress updates in chat.
 
 - **User** — googleId, email, name, locale
 - **App** — name, subdomain, status (creating/running/stopped/error), spec (JSON), generatedAt, deployedAt, userId
-- **AppVersion** — appId, version, spec, gitCommitHash
+- **AppVersion** — appId, version, spec (JSON snapshot of the spec at this version), createdAt. No git — generated code is ephemeral, the spec is the source of truth. Any version can be regenerated from its spec.
+- **TelegramConnection** — userId, appId, chatId (Telegram chat ID for notifications)
 - **ChatSession** — appId (nullable — null while app not yet created), userId
 - **ChatMessage** — sessionId, role (user/assistant), content
 - **AiAccessRequest** — userId, status (pending/approved/rejected)
@@ -122,9 +173,10 @@ Single Telegram bot for the entire platform (`@ilmarinen_bot`).
 **User connection:**
 1. Generated app has "Settings" page (part of template)
 2. "Connect Telegram notifications" button
-3. Opens `t.me/ilmarinen_bot?start=<token>`
-4. User presses /start — bot links chatId to user
-5. Done
+3. App requests a connection token from the Ilmarinen platform API (`POST /api/telegram/connect-token` with userId and appId). Platform returns a short-lived token.
+4. Button opens `t.me/ilmarinen_bot?start=<token>`
+5. User presses /start — bot receives the token, calls platform API to resolve it to userId + appId, stores the Telegram chatId mapping in the platform database (new model: **TelegramConnection** — userId, appId, chatId)
+6. Done
 
 **Sending notifications:**
 - Template includes `notifications` module
@@ -164,7 +216,15 @@ VPS
 - All containers on shared Docker network `muntim_gateway`
 - Telegram bot: long polling (simpler than webhooks for start)
 
+**Container resource limits:** Each app container is capped at 256MB RAM and 0.5 CPU via Docker Compose `deploy.resources.limits`. Prevents a single app from starving others.
+
 **Capacity:** 10-50 users, ~50-100 apps. Each app ~2 containers, ~100-200MB RAM. Single VPS sufficient for start.
+
+**App lifecycle:**
+- **creating** — App Engine pipeline in progress
+- **running** — healthy, responding to requests
+- **stopped** — user manually stopped from Ilmarinen dashboard, containers removed
+- **error** — health check failed after deploy, or container crashed. User sees error status on dashboard with "Retry" button that re-runs build+deploy from the current spec.
 
 ## Security and Isolation
 
@@ -174,7 +234,7 @@ VPS
 - **AI key encryption** — AES-256, decrypted only at request time.
 - **Code generation boundaries** — AI generates only within designated directories (modules, routes, components). Cannot modify Docker, deploy scripts, auth.
 - **Validation gate** — TypeScript + Prisma validation before deploy catches syntax errors.
-- **Authentication** — shared Google OAuth through Ilmarinen as auth provider. Single login works across platform and user's apps.
+- **Authentication** — generated apps delegate auth to the Ilmarinen platform. The flow: generated app redirects to `ilmarinen.muntim.ru/auth/app-login?app=<subdomain>`, user logs in via Google (or is already logged in), Ilmarinen issues a JWT scoped to that app and redirects back to `<subdomain>.apps.muntim.ru/auth/callback?token=<jwt>`. The app's auth module (part of the template) validates the JWT using a shared public key from the platform. No separate Google OAuth credentials per app needed.
 
 ## MVP Scope
 
