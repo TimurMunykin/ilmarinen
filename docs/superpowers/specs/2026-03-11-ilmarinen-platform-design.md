@@ -96,6 +96,13 @@ Pipeline:
 
    This JSON spec is the contract between the chat/AI phase and the code generation phase. The AI produces it, the code generator consumes it. Both sides can be built and tested independently against this schema.
 
+   **Spec schema rules:**
+   - `models[].fields[].type` — Prisma scalar types: `String`, `Int`, `Float`, `Boolean`, `DateTime`, `Json`. Or `relation` with a `target` model name (always many-to-one FK for MVP; many-to-many out of scope).
+   - `screens[].type` — `list` (table/card list of records), `detail` (single record view with related records), `form` (create/edit form). These three cover CRUD apps. More types can be added later.
+   - `screens[].children` — optional, list of related model names shown on detail screens.
+   - `notifications[].trigger.condition` — simple expression evaluated by the template's notification cron: compares a date field to "now" with an offset. Format: `daysUntil(<dateField>) <= N` or `daysSince(<dateField>) >= N`.
+   - `subdomain` — must be unique across the platform. Enforced by unique constraint on App.subdomain.
+
 2. **Scaffolding** — clone app-template, substitute name/subdomain in configs, CREATE DATABASE in shared PostgreSQL
 
 3. **Code generation (AI)** — AI receives spec + template code, generates:
@@ -106,7 +113,7 @@ Pipeline:
 
 4. **Validation** — `bunx prisma validate` + `bunx tsc --noEmit`. On failure, AI receives error log and retries (up to 3 attempts)
 
-5. **Build and deploy** — `docker build` for api and web, `docker compose up`, `prisma migrate deploy`, register subdomain in Caddy via admin API (`POST /config/apps/http/servers/srv0/routes` to add a route for the new subdomain pointing to the app's web container). Caddy's admin API allows live config updates without restart.
+5. **Build and deploy** — `docker build` for api and web, `docker compose up`, `prisma migrate deploy`. Caddy routing uses a wildcard rule (`*.apps.muntim.ru`) that extracts the subdomain from the hostname and reverse-proxies to `{subdomain}-web:80`. Container naming convention (`<subdomain>-api`, `<subdomain>-web`) makes this automatic — no per-app Caddy config updates needed.
 
 6. **Health check** — after deploy, App Engine sends a GET to the app's health endpoint. If it doesn't respond within 30 seconds, mark app status as "error".
 
@@ -114,13 +121,17 @@ Pipeline:
 
 Expected time: 2-5 minutes per app creation. User sees progress updates in chat.
 
+**Pipeline failure cleanup:** If any step fails after scaffolding, the created database is dropped and generated files are removed. App status is set to "error" with the failure reason stored. User can retry or modify their request.
+
+**Build order:** App Template must be built and tested first (it's the foundation). Then the Platform (needs the template to exist for App Engine). App Engine is a module within the Platform.
+
 ### Edit pipeline
 
 Editing an existing app differs from creation:
 
-1. **Specification** — AI receives the current spec + user's change request, produces an updated spec with a diff summary
-2. **Code update** — AI regenerates only the changed modules/pages. Unchanged files are preserved.
-3. **Database migration** — Prisma compares new schema against existing database, generates migration. If migration would lose data (dropping columns/tables), AI flags this to the user for confirmation before proceeding.
+1. **Specification** — AI receives the current spec + user's change request, produces an updated spec
+2. **Full code regeneration** — AI regenerates all business-logic files from the updated spec (same as creation pipeline step 3). Simpler than tracking diffs — the spec is the source of truth, code is always regenerated from it. Template files are untouched.
+3. **Database migration** — `bunx prisma migrate diff` compares new schema against current DB and outputs SQL. App Engine scans the SQL for DROP statements. If found, the user is asked to confirm before proceeding. If confirmed (or no drops), `prisma migrate deploy` applies the migration.
 4. **Validation** — same as creation (TypeScript + Prisma validate)
 5. **Rebuild and redeploy** — `docker build` + `docker compose up --force-recreate`. Brief downtime acceptable for MVP (seconds during container swap).
 6. **Health check** — same as creation
@@ -181,8 +192,8 @@ Single Telegram bot for the entire platform (`@ilmarinen_bot`).
 **Sending notifications:**
 - Template includes `notifications` module
 - AI generates notification rules during app creation
-- Cron job inside each app's API checks schedule, sends via Telegram Bot API
-- Single bot, but each app knows its user's chatId
+- NestJS `@Cron('0 9 * * *')` decorator (runs daily at 9:00 AM) in the template's notification module. On each run, it evaluates all notification rules from the app's spec against current data (e.g., queries Procedure records where `daysUntil(nextDate) <= 7`). Matching records trigger a Telegram message via the bot API.
+- Each app stores the Telegram bot token as an env var (injected at deploy time). The app calls `https://api.telegram.org/bot<token>/sendMessage` directly — no dependency on the platform at runtime for sending.
 - Message format includes app name for clarity when user has multiple apps
 
 ## Infrastructure
@@ -212,7 +223,7 @@ VPS
 **Key decisions:**
 - Single PostgreSQL server, separate database per app (saves RAM, data isolated)
 - Wildcard DNS: `*.apps.muntim.ru → VPS IP` (configured once)
-- Wildcard Caddy route in muntim-gateway (auto-updated on new app deploy)
+- Wildcard Caddy route in muntim-gateway: `*.apps.muntim.ru` extracts subdomain, proxies to `{subdomain}-web:80`. No config update per app.
 - All containers on shared Docker network `muntim_gateway`
 - Telegram bot: long polling (simpler than webhooks for start)
 
@@ -230,7 +241,7 @@ VPS
 
 - **Database isolation** — separate database per app (not schema, full database). One app cannot read another's data.
 - **Container isolation** — Docker containers isolated. Shared network only for routing.
-- **Per-app JWT_SECRET** — generated at creation time.
+- **Asymmetric JWT** — platform signs JWTs with an RSA private key. Each generated app receives only the public key (injected as env var at deploy). Apps can validate tokens but cannot forge them.
 - **AI key encryption** — AES-256, decrypted only at request time.
 - **Code generation boundaries** — AI generates only within designated directories (modules, routes, components). Cannot modify Docker, deploy scripts, auth.
 - **Validation gate** — TypeScript + Prisma validation before deploy catches syntax errors.
