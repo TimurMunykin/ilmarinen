@@ -1,0 +1,22 @@
+{
+  "common": {
+    "loading": "Загрузка...",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "edit": "Редактировать",
+    "back": "Назад",
+    "error": "Ошибка"
+  },
+  "auth": {
+    "login": "Войти",
+    "logout": "Выйти",
+    "loginWith": "Войти через Google"
+  },
+  "settings": {
+    "title": "Настройки",
+    "telegram": "Telegram уведомления",
+    "telegramConnect": "Подключить Telegram",
+    "telegramConnected": "Telegram подключен"
+  }
+}

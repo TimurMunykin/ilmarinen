@@ -1,0 +1,22 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "error": "Error"
+  },
+  "auth": {
+    "login": "Log in",
+    "logout": "Log out",
+    "loginWith": "Log in with Google"
+  },
+  "settings": {
+    "title": "Settings",
+    "telegram": "Telegram notifications",
+    "telegramConnect": "Connect Telegram",
+    "telegramConnected": "Telegram connected"
+  }
+}
