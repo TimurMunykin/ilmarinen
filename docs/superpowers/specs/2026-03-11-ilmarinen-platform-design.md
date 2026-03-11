@@ -86,7 +86,7 @@ Pipeline:
      ],
      "notifications": [
        {
-         "trigger": { "model": "Procedure", "condition": "daysUntilNext <= 7" },
+         "trigger": { "model": "Procedure", "condition": "daysUntil(nextDate) <= 7" },
          "channel": "telegram",
          "template": "Reminder: {{procedure.name}} for {{pet.name}} is due in {{daysUntilNext}} days"
        }
@@ -131,8 +131,8 @@ Editing an existing app differs from creation:
 
 1. **Specification** — AI receives the current spec + user's change request, produces an updated spec
 2. **Full code regeneration** — AI regenerates all business-logic files from the updated spec (same as creation pipeline step 3). Simpler than tracking diffs — the spec is the source of truth, code is always regenerated from it. Template files are untouched.
-3. **Database migration** — `bunx prisma migrate diff` compares new schema against current DB and outputs SQL. App Engine scans the SQL for DROP statements. If found, the user is asked to confirm before proceeding. If confirmed (or no drops), `prisma migrate deploy` applies the migration.
-4. **Validation** — same as creation (TypeScript + Prisma validate)
+3. **Validation** — same as creation (TypeScript + Prisma validate). Runs before migration to catch errors early.
+4. **Database migration** — `bunx prisma migrate diff` compares new schema against current DB and outputs SQL. App Engine scans the SQL for DROP statements. If found, the user is asked to confirm before proceeding. If confirmed (or no drops), `prisma migrate deploy` applies the migration.
 5. **Rebuild and redeploy** — `docker build` + `docker compose up --force-recreate`. Brief downtime acceptable for MVP (seconds during container swap).
 6. **Health check** — same as creation
 
@@ -210,7 +210,7 @@ VPS
 │   ├── ilmarinen-api                — NestJS API
 │   ├── ilmarinen-web                — React frontend
 │   ├── ilmarinen-db                 — PostgreSQL (platform DB + all app DBs)
-│   └── ilmarinen-telegram-bot       — long polling
+│   └── (telegram bot runs as a module inside ilmarinen-api, long polling)
 │
 └── generated apps
     ├── my-pet-api                   — container
