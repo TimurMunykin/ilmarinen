@@ -1,0 +1,35 @@
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  api:
+    build:
+      context: ./apps/api
+      target: dev
+    volumes:
+      - ./apps/api/src:/app/src
+      - ./apps/api/prisma:/app/prisma
+    ports:
+      - "${API_PORT:-3001}:3001"
+    command: >
+      sh -c "bunx prisma migrate deploy && bun run dev"
+
+  web:
+    build:
+      context: ./apps/web
+      target: dev
+    volumes:
+      - ./apps/web/src:/app/src
+    ports:
+      - "5173:5173"
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+    depends_on:
+      - api
+      - web
