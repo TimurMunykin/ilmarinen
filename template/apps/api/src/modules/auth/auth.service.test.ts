@@ -4,7 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 
 describe('AuthService', () => {
   let authService: AuthService;
-  let prisma: { user: { findUnique: jest.fn; upsert: jest.fn } };
+  let prisma: { user: { findUnique: jest.Mock; upsert: jest.Mock } };
 
   beforeEach(async () => {
     prisma = {

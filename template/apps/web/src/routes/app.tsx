@@ -5,7 +5,7 @@ import { isAuthenticated, logout } from '@/lib/auth';
 import { api, type User } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 
-export const Route = createFileRoute('/_app')({
+export const Route = createFileRoute('/app')({
   component: AppLayout,
 });
 
