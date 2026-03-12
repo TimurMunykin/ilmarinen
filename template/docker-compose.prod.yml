@@ -1,0 +1,41 @@
+services:
+  postgres:
+    profiles: ["dev-only"]
+
+  api:
+    build:
+      context: ./apps/api
+      target: prod
+    restart: unless-stopped
+    volumes: []
+    ports: []
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    command: >
+      sh -c "bunx prisma migrate deploy && node dist/main.js"
+
+  web:
+    build:
+      context: ./apps/web
+      target: prod
+    restart: unless-stopped
+    volumes: []
+    ports: []
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    networks:
+      default:
+      gateway:
+        aliases:
+          - ${APP_SUBDOMAIN:-app}-web
+
+networks:
+  gateway:
+    external: true
+    name: muntim_gateway
