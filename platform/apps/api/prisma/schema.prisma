@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  googleId  String   @unique
+  email     String   @unique
+  name      String?
+  locale    String   @default("ru")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  apps                App[]
+  chatSessions        ChatSession[]
+  aiKeys              AiKey[]
+  aiAccessRequests    AiAccessRequest[]
+  telegramConnections TelegramConnection[]
+}
+
+enum AppStatus {
+  CREATING
+  RUNNING
+  STOPPED
+  ERROR
+}
+
+model App {
+  id          String    @id @default(uuid())
+  name        String
+  subdomain   String    @unique
+  status      AppStatus @default(CREATING)
+  spec        Json?
+  errorReason String?
+  generatedAt DateTime?
+  deployedAt  DateTime?
+  userId      String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  versions            AppVersion[]
+  chatSessions        ChatSession[]
+  telegramConnections TelegramConnection[]
+}
+
+model AppVersion {
+  id        String   @id @default(uuid())
+  version   Int
+  spec      Json
+  appId     String
+  createdAt DateTime @default(now())
+
+  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@unique([appId, version])
+}
+
+model TelegramConnection {
+  id        String   @id @default(uuid())
+  chatId    String
+  userId    String
+  appId     String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  app  App  @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, appId])
+}
+
+model ChatSession {
+  id        String   @id @default(uuid())
+  userId    String
+  appId     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  app      App?          @relation(fields: [appId], references: [id], onDelete: SetNull)
+  messages ChatMessage[]
+}
+
+model ChatMessage {
+  id        String   @id @default(uuid())
+  role      String
+  content   String
+  sessionId String
+  createdAt DateTime @default(now())
+
+  session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
+enum AiAccessRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model AiAccessRequest {
+  id        String                @id @default(uuid())
+  status    AiAccessRequestStatus @default(PENDING)
+  userId    String
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AiKey {
+  id           String   @id @default(uuid())
+  encryptedKey String
+  provider     String   @default("openai")
+  userId       String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
