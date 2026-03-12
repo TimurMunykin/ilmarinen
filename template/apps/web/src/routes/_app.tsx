@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Outlet, useNavigate, Link } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isAuthenticated, logout } from '@/lib/auth';
@@ -32,6 +32,9 @@ function AppLayout() {
         <h1 className="font-semibold">{{APP_NAME}}</h1>
         <div className="flex items-center gap-2">
           <span className="text-sm text-muted-foreground">{user.email}</span>
+          <Link to="/app/settings">
+            <Button variant="ghost" size="sm">{t('settings.title')}</Button>
+          </Link>
           <Button variant="ghost" size="sm" onClick={logout}>
             {t('auth.logout')}
           </Button>
