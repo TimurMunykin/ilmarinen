@@ -1,0 +1,48 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "error": "Error",
+    "back": "Back"
+  },
+  "auth": {
+    "login": "Log in",
+    "logout": "Log out",
+    "loginWith": "Log in with Google",
+    "tagline": "Create apps with AI"
+  },
+  "dashboard": {
+    "title": "My Apps",
+    "createApp": "Create App",
+    "noApps": "You don't have any apps yet",
+    "status": {
+      "CREATING": "Creating...",
+      "RUNNING": "Running",
+      "STOPPED": "Stopped",
+      "ERROR": "Error"
+    },
+    "open": "Open",
+    "edit": "Edit",
+    "stop": "Stop"
+  },
+  "aiAccess": {
+    "title": "AI Access",
+    "ownKey": "Your OpenAI API Key",
+    "enterKey": "Enter API Key",
+    "removeKey": "Remove Key",
+    "requestFree": "Request Free Access",
+    "requestPending": "Request Pending",
+    "requestApproved": "Access Approved",
+    "requestRejected": "Request Rejected",
+    "hasKey": "Key Set"
+  },
+  "admin": {
+    "title": "Admin Panel",
+    "requests": "AI Access Requests",
+    "noRequests": "No pending requests",
+    "approve": "Approve",
+    "reject": "Reject"
+  }
+}
