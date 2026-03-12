@@ -5,11 +5,11 @@ export class CreateAppDto {
   @IsString()
   @MinLength(2)
   @MaxLength(50)
-  name: string;
+  name!: string;
 
   @IsString()
   @Matches(/^[a-z][a-z0-9-]{1,62}[a-z0-9]$/, {
     message: 'subdomain must be lowercase alphanumeric with hyphens, 3-64 chars',
   })
-  subdomain: string;
+  subdomain!: string;
 }

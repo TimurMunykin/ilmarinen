@@ -41,7 +41,9 @@ describe('TelegramService', () => {
 
     it('should reject a tampered token', () => {
       const token = service.generateConnectToken('u1', 'my-pet');
-      const tampered = token.replace('u1', 'u2');
+      const [payload, sig] = token.split('.');
+      // Tamper with the signature
+      const tampered = `${payload}.${sig.slice(0, -1)}X`;
       expect(service.resolveConnectToken(tampered)).toBeNull();
     });
   });
