@@ -20,6 +20,7 @@ function ChatSessionPage() {
   const [messages, setMessages] = useState<ChatMessageDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,6 +55,19 @@ function ChatSessionPage() {
     }
   };
 
+  const handleConfirm = async (spec: AppSpec) => {
+    setIsCreating(true);
+    setError(null);
+    try {
+      const app = await api.createApp({ name: spec.name, subdomain: spec.subdomain });
+      await api.generateApp(app.id, spec);
+      navigate({ to: '/app' });
+    } catch {
+      setError(t('chat.error'));
+      setIsCreating(false);
+    }
+  };
+
   const lastSpec = findLastSpec(messages);
 
   return (
@@ -70,14 +84,14 @@ function ChatSessionPage() {
         {lastSpec && (
           <SpecCard
             spec={lastSpec}
-            onConfirm={() => {}}
+            onConfirm={() => handleConfirm(lastSpec)}
             onEdit={() => {}}
-            isCreating={false}
+            isCreating={isCreating}
           />
         )}
       </ChatMessages>
 
-      <ChatInput onSend={handleSend} disabled={isLoading || isSending} />
+      <ChatInput onSend={handleSend} disabled={isLoading || isSending || isCreating} />
     </div>
   );
 }

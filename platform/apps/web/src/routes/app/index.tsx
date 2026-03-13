@@ -26,7 +26,9 @@ function Dashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">{t('dashboard.title')}</h2>
-        <Button>{t('dashboard.createApp')}</Button>
+        <Link to="/app/chat/new">
+          <Button>{t('dashboard.createApp')}</Button>
+        </Link>
       </div>
 
       {apps.length === 0 ? (
