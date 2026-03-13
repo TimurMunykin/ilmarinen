@@ -7,7 +7,7 @@ Add a chat interface where users describe their app idea in natural language. Th
 ## UX Flow
 
 1. User clicks "Создать приложение" on dashboard → navigates to `/app/chat/new`
-2. Backend creates a `ChatSession`, redirects to `/app/chat/$sessionId`
+2. Frontend calls `POST /chat/sessions`, gets session ID, navigates (client-side) to `/app/chat/$sessionId`
 3. User types a message describing their app idea
 4. Backend sends message history + system prompt to OpenAI, returns AI response
 5. AI asks clarifying questions (models, fields, screens, notifications)
@@ -39,7 +39,7 @@ All endpoints require JWT auth and enforce ownership (session.userId === user.id
 2. Save user message to `ChatMessage` (role: "user")
 3. Load all session messages from DB
 4. Build OpenAI messages array: system prompt + message history
-5. Call OpenAI `chat.completions.create` with `response_format: json_object`
+5. Call OpenAI `chat.completions.create` (model: `gpt-4o`, configurable via `OPENAI_MODEL` env) with `response_format: json_object` (system prompt must mention "JSON" for this mode to work)
 6. Parse response — AI returns `{ message: string, spec?: AppSpec }`
 7. Save AI message to `ChatMessage` (role: "assistant", content: message text, metadata column stores spec if present)
 8. Return the AI message with spec (if present) to frontend
@@ -51,6 +51,9 @@ All endpoints require JWT auth and enforce ownership (session.userId === user.id
 - When confident, output `spec` field with a valid `AppSpec` JSON object
 - Keep the conversation concise (3-5 exchanges typical)
 - Explain the spec in human terms in the `message` field when proposing
+- Always respond in JSON format with `message` and `spec` fields
+
+**Message limit:** Max 30 messages per session. After the limit, the endpoint returns 400 with a message suggesting the user start a new session.
 
 **Response format from AI (JSON):**
 ```json
@@ -62,9 +65,16 @@ All endpoints require JWT auth and enforce ownership (session.userId === user.id
 
 When `spec` is non-null, the frontend shows the spec proposal card.
 
-### Database Changes
+### Database Migration
 
-Add `metadata` column to `ChatMessage` for storing spec proposals:
+Add `metadata Json?` column to `ChatMessage` for storing spec proposals. Run as the first implementation step:
+
+```bash
+# Add metadata field to ChatMessage in schema.prisma, then:
+cd platform/apps/api && bunx prisma migrate dev --name add-chat-message-metadata
+```
+
+Updated model:
 
 ```prisma
 model ChatMessage {
@@ -106,6 +116,7 @@ model ChatMessage {
 1. Call `api.createApp({ name: spec.name, subdomain: spec.subdomain })`
 2. Call `api.generateApp(appId, spec)` (new API method wrapping `POST /apps/:id/generate`)
 3. Navigate to `/app` (dashboard)
+4. **Error handling:** if `generateApp` fails, show error toast and offer retry. If `createApp` fails (e.g., subdomain taken), show error in the chat and let user modify the spec.
 
 **Chat input:**
 - Textarea (auto-resize, max 4 lines)
@@ -120,13 +131,50 @@ model ChatMessage {
 Add to `platform/apps/web/src/lib/api.ts`:
 
 ```typescript
-// Chat
+// Types
+export interface ChatSession {
+  id: string;
+  userId: string;
+  appId: string | null;
+  messages: ChatMessageDTO[];
+  createdAt: string;
+}
+
+export interface ChatMessageDTO {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  metadata: { spec?: AppSpec } | null;
+  createdAt: string;
+}
+
+export interface AppSpec {
+  name: string;
+  subdomain: string;
+  description: string;
+  models: {
+    name: string;
+    fields: { name: string; type: string; optional?: boolean; target?: string }[];
+  }[];
+  screens: {
+    name: string;
+    type: 'list' | 'detail' | 'form';
+    model: string;
+  }[];
+  notifications?: {
+    trigger: { model: string; condition: string };
+    channel: 'telegram';
+    template: string;
+  }[];
+}
+
+// API methods
 createChatSession: () =>
   apiFetch<{ id: string }>('/chat/sessions', { method: 'POST' }),
 getChatSession: (id: string) =>
   apiFetch<ChatSession>(`/chat/sessions/${id}`),
 sendChatMessage: (sessionId: string, content: string) =>
-  apiFetch<ChatMessageResponse>(`/chat/sessions/${sessionId}/messages`, {
+  apiFetch<ChatMessageDTO>(`/chat/sessions/${sessionId}/messages`, {
     method: 'POST',
     body: JSON.stringify({ content }),
   }),
@@ -143,6 +191,7 @@ generateApp: (appId: string, spec: AppSpec) =>
 
 Add to both `ru.json` and `en.json`:
 
+**ru.json:**
 ```json
 {
   "chat": {
@@ -157,7 +206,31 @@ Add to both `ru.json` and `en.json`:
       "notifications": "Уведомления",
       "create": "Создать приложение",
       "edit": "Изменить"
-    }
+    },
+    "error": "Произошла ошибка, попробуйте ещё раз",
+    "limitReached": "Достигнут лимит сообщений. Создайте новую сессию."
+  }
+}
+```
+
+**en.json:**
+```json
+{
+  "chat": {
+    "title": "Create App",
+    "placeholder": "Describe the app you want to create...",
+    "send": "Send",
+    "thinking": "Thinking...",
+    "specCard": {
+      "title": "Your App",
+      "models": "Data Models",
+      "screens": "Screens",
+      "notifications": "Notifications",
+      "create": "Create App",
+      "edit": "Edit"
+    },
+    "error": "An error occurred, please try again",
+    "limitReached": "Message limit reached. Please start a new session."
   }
 }
 ```
