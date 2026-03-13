@@ -7,6 +7,7 @@ import { AppsModule } from './modules/apps/apps.module';
 import { AiAccessModule } from './modules/ai-access/ai-access.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { EngineModule } from './modules/engine/engine.module';
+import { ChatModule } from './modules/chat/chat.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { EngineModule } from './modules/engine/engine.module';
     AiAccessModule,
     TelegramModule,
     EngineModule,
+    ChatModule,
   ],
 })
 export class AppModule {}
