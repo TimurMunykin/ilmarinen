@@ -34,6 +34,42 @@ export interface AiAccessRequest {
   createdAt: string;
 }
 
+export interface ChatSession {
+  id: string;
+  userId: string;
+  appId: string | null;
+  messages: ChatMessageDTO[];
+  createdAt: string;
+}
+
+export interface ChatMessageDTO {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  metadata: { spec?: AppSpec } | null;
+  createdAt: string;
+}
+
+export interface AppSpec {
+  name: string;
+  subdomain: string;
+  description: string;
+  models: {
+    name: string;
+    fields: { name: string; type: string; optional?: boolean; target?: string }[];
+  }[];
+  screens: {
+    name: string;
+    type: 'list' | 'detail' | 'form';
+    model: string;
+  }[];
+  notifications?: {
+    trigger: { model: string; condition: string };
+    channel: 'telegram';
+    template: string;
+  }[];
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const res = await fetch(`${API_BASE}${path}`, {
@@ -76,4 +112,22 @@ export const api = {
     apiFetch(`/admin/ai-access/requests/${id}/reject`, { method: 'POST' }),
   setPlatformKey: (apiKey: string) =>
     apiFetch('/admin/ai-access/platform-key', { method: 'POST', body: JSON.stringify({ apiKey }) }),
+
+  // Chat
+  createChatSession: () =>
+    apiFetch<{ id: string }>('/chat/sessions', { method: 'POST' }),
+  getChatSession: (id: string) =>
+    apiFetch<ChatSession>(`/chat/sessions/${id}`),
+  sendChatMessage: (sessionId: string, content: string) =>
+    apiFetch<ChatMessageDTO>(`/chat/sessions/${sessionId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    }),
+
+  // Engine
+  generateApp: (appId: string, spec: AppSpec) =>
+    apiFetch(`/apps/${appId}/generate`, {
+      method: 'POST',
+      body: JSON.stringify({ spec }),
+    }),
 };

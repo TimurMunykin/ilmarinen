@@ -44,5 +44,21 @@
     "noRequests": "No pending requests",
     "approve": "Approve",
     "reject": "Reject"
+  },
+  "chat": {
+    "title": "Create App",
+    "placeholder": "Describe the app you want to create...",
+    "send": "Send",
+    "thinking": "Thinking...",
+    "specCard": {
+      "title": "Your App",
+      "models": "Data Models",
+      "screens": "Screens",
+      "notifications": "Notifications",
+      "create": "Create App",
+      "edit": "Edit"
+    },
+    "error": "An error occurred, please try again",
+    "limitReached": "Message limit reached. Please start a new session."
   }
 }
