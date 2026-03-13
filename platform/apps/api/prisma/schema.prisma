@@ -90,6 +90,7 @@ model ChatMessage {
   id        String   @id @default(uuid())
   role      String
   content   String
+  metadata  Json?    // stores spec proposal when role=assistant
   sessionId String
   createdAt DateTime @default(now())
 
